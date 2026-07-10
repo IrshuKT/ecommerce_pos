@@ -1,4 +1,4 @@
-# GlassStore — Indian Glass E-Commerce
+# POS Supermarket E-Commerce
 
 FastAPI backend + Next.js frontend for Indian glass materials store.
 
