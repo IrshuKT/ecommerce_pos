@@ -16,7 +16,12 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, user, isLoading, error, clearError } = useAuthStore();
   const { register, handleSubmit, formState: { errors } } = useForm<F>({ resolver: zodResolver(schema) });
-  useEffect(() => { if (user) router.replace(user.role === "admin" ? "/admin" : "/shop"); }, [user, router]);
+  useEffect(() => {
+  if (user) {
+    const staffRoles = ["admin", "manager", "sales_staff"];
+    router.replace(staffRoles.includes(user.role) ? "/admin" : "/shop");
+  }
+}, [user, router]);
   return (
     <div>
       <div style={{ marginBottom: 32 }}>

@@ -14,7 +14,7 @@ import enum
 from app.db.session import get_db
 from app.models.models import ProductVariant, Product, User
 from app.models.stock_transactions import StockTransaction
-from app.api.v1.endpoints.auth import get_admin_user
+from app.api.v1.endpoints.auth import require_backoffice
 
 
 router = APIRouter()
@@ -38,11 +38,9 @@ async def list_stock_transactions(
     page: int = Query(1, ge=1),
     limit: int = Query(30, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     """List all stock transactions for a product, optionally filtered by variant or type."""
-    # ← removed get_stock_transaction_model() — StockTransaction is imported at top of file
-
     prod = await db.execute(
         select(Product).options(selectinload(Product.variants)).where(Product.id == product_id)
     )
@@ -99,7 +97,7 @@ async def create_stock_transaction(
     product_id: int,
     payload: StockTxnIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     if payload.txn_type not in ("in", "out", "adjustment"):
         raise HTTPException(400, "txn_type must be 'in', 'out', or 'adjustment'")

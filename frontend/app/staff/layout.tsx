@@ -8,7 +8,7 @@ import { SettingsProvider } from "../context/SettingsContext";
 
 const STAFF_ROLES = ["admin", "manager", "sales_staff"];
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function StaffLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
   const router = useRouter();
   const [hydrated, setHydrated] = useState(false);

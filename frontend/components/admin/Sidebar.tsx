@@ -46,7 +46,7 @@ const nav: NavItem[] = [
   { label: "Accounting", href: "/admin/accounting", icon: "🧾", expandable: true, subItems: accountingItems, roles: ["admin", "manager"] },
   { label: "Reports",    href: "/admin/reports",    icon: "📊", expandable: true, subItems: reportsItems, roles: ["admin", "manager"] },
   { label: "Coupons",    href: "/admin/coupons",    icon: "🏷️", roles: ["admin", "manager"] },
-  { label: "Staff Users", href: "/admin/staff", icon: "🧑‍💼", roles: ["admin"] },
+  { label: "Users", href: "/staff", icon: "🧑‍💼", roles: ["admin", "manager", "sales_staff"] },
   { label: "Settings",   href: "/admin/settings",   icon: "⚙️", roles: ["admin"] },
 ];
 

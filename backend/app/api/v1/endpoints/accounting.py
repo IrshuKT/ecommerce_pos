@@ -18,7 +18,7 @@ from app.models.accounting import (
     PurchaseStatus, ReturnStatus, VendorStatus
 )
 from app.models.models import User
-from app.api.v1.endpoints.auth import get_admin_user, get_current_user
+from app.api.v1.endpoints.auth import get_current_user, require_backoffice
 from app.services.journal_service import (
     post_purchase_journal, post_purchase_return_journal,
     post_receipt_journal, post_payment_journal,
@@ -51,7 +51,7 @@ class VendorIn(BaseModel):
 @vendors_router.get("/")
 async def list_vendors(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
     search: Optional[str] = None,
 ):
     query = select(Vendor).where(Vendor.status == VendorStatus.active).order_by(Vendor.name)
@@ -65,7 +65,7 @@ async def list_vendors(
 async def create_vendor(
     payload: VendorIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     existing = await db.execute(select(Vendor).where(Vendor.code == payload.code))
     if existing.scalar_one_or_none():
@@ -80,7 +80,7 @@ async def create_vendor(
 async def get_vendor(
     vendor_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     result = await db.execute(select(Vendor).where(Vendor.id == vendor_id))
     vendor = result.scalar_one_or_none()
@@ -94,7 +94,7 @@ async def update_vendor(
     vendor_id: int,
     payload: VendorIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     result = await db.execute(select(Vendor).where(Vendor.id == vendor_id))
     vendor = result.scalar_one_or_none()
@@ -143,7 +143,7 @@ def _calc_item(item: PurchaseItemIn):
 async def create_purchase(
     payload: PurchaseIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     vendor_result = await db.execute(select(Vendor).where(Vendor.id == payload.vendor_id))
     vendor = vendor_result.scalar_one_or_none()
@@ -204,7 +204,7 @@ async def create_purchase(
 @purchase_router.get("/")
 async def list_purchases(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
     vendor_id: Optional[int] = None,
     status: Optional[str] = None,
     page: int = Query(1, ge=1),
@@ -223,7 +223,7 @@ async def list_purchases(
 async def mark_received(
     purchase_number: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     result = await db.execute(
         select(Purchase)
@@ -243,14 +243,10 @@ async def mark_received(
 
     stock_updated = 0
 
-    print(f"DEBUG: Purchase {purchase_number} has {len(purchase.items)} items")
-
     for item in purchase.items:
-        print(f"DEBUG: Item — product={item.product_name}, variant_id={item.variant_id}, qty={item.quantity}")
         item.received_qty = item.quantity
 
         if not item.variant_id:
-            print(f"DEBUG: SKIPPING — variant_id is None for {item.product_name}")
             continue
 
         v_result = await db.execute(
@@ -259,10 +255,7 @@ async def mark_received(
         variant = v_result.scalar_one_or_none()
 
         if not variant:
-            print(f"DEBUG: SKIPPING — variant {item.variant_id} not found in DB")
             continue
-
-        print(f"DEBUG: Stock BEFORE = {variant.stock_qty} for variant {variant.sku}")
 
         after = await record_stock_transaction(
             db=db,
@@ -275,7 +268,6 @@ async def mark_received(
             created_by_id=current_user.id,
         )
 
-        print(f"DEBUG: Stock AFTER = {after} for variant {variant.sku}")
         db.add(variant)
         await db.flush()
         stock_updated += 1
@@ -283,8 +275,6 @@ async def mark_received(
     purchase.status = PurchaseStatus.received
     await db.commit()
     await db.refresh(purchase)
-
-    print(f"DEBUG: Committed. {stock_updated} variants updated.")
 
     return {
         "message": f"Purchase received. {stock_updated} variant(s) stock updated.",
@@ -295,7 +285,7 @@ async def mark_received(
 async def get_purchase(
     purchase_number: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     result = await db.execute(
         select(Purchase).options(selectinload(Purchase.items))
@@ -334,7 +324,7 @@ class PurchaseReturnIn(BaseModel):
 async def create_purchase_return(
     payload: PurchaseReturnIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     from app.services.stock_service import record_stock_transaction
     from app.models.models import ProductVariant
@@ -404,7 +394,7 @@ async def create_purchase_return(
 @pr_router.get("/")
 async def list_purchase_returns(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
     page: int = Query(1, ge=1),
     limit: int = Query(20, le=100),
 ):
@@ -444,7 +434,7 @@ class ReceiptEditIn(BaseModel):
 async def create_receipt(
     payload: ReceiptIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     from app.services.journal_service import _payment_mode_account
     from app.models.accounting import Account, InvoiceStatus
@@ -495,7 +485,7 @@ async def update_receipt(
     receipt_number: str,
     payload: ReceiptEditIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     result = await db.execute(select(ReceiptVoucher).where(ReceiptVoucher.receipt_number == receipt_number))
     receipt = result.scalar_one_or_none()
@@ -510,7 +500,7 @@ async def update_receipt(
 @receipt_router.get("/")
 async def list_receipts(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
     page: int = Query(1, ge=1),
     limit: int = Query(20, le=100),
 ):
@@ -524,7 +514,7 @@ async def list_receipts(
 async def get_receipt(
     receipt_number: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     result = await db.execute(
         select(ReceiptVoucher).where(ReceiptVoucher.receipt_number == receipt_number)
@@ -568,7 +558,7 @@ async def get_receipt(
 @accounting_router.get("/accounts")
 async def get_accounts(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     accounts = (await db.execute(
         select(Account)
@@ -618,7 +608,7 @@ class PaymentVEditIn(BaseModel):
 async def create_payment_voucher(
     payload: PaymentVIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     from app.services.journal_service import _payment_mode_account
     from app.models.accounting import Account
@@ -669,7 +659,7 @@ async def create_payment_voucher(
 @payment_v_router.get("/")
 async def list_payment_vouchers(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
     page: int = Query(1, ge=1),
     limit: int = Query(20, le=100),
 ):
@@ -684,7 +674,7 @@ async def update_payment_voucher(
     payment_number: str,
     payload: PaymentVEditIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     result = await db.execute(select(PaymentVoucher).where(PaymentVoucher.payment_number == payment_number))
     payment = result.scalar_one_or_none()
@@ -699,7 +689,7 @@ async def update_payment_voucher(
 async def get_payment_voucher(
     payment_number: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     result = await db.execute(
         select(PaymentVoucher).where(PaymentVoucher.payment_number == payment_number)
@@ -738,4 +728,3 @@ async def get_payment_voucher(
         "cheque_date": payment.cheque_date,
         "created_at": payment.created_at,
     }
-

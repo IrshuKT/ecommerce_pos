@@ -65,7 +65,8 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     user = User(name=payload.name, email=payload.email, phone=payload.phone,
                 hashed_password=get_password_hash(payload.password), role=UserRole.customer)
     db.add(user)
-    await db.flush()
+    await db.commit()
+    await db.refresh(user)
     token = create_access_token({"sub": str(user.id)})
     return TokenResponse(access_token=token, user_id=user.id, name=user.name, role=user.role)
 
@@ -134,7 +135,8 @@ async def setup_admin(payload: SetupAdminRequest, db: AsyncSession = Depends(get
         is_verified=True,
     )
     db.add(user)
-    await db.flush()
+    await db.commit()
+    await db.refresh(user)
     token = create_access_token({"sub": str(user.id)})
     return TokenResponse(access_token=token, user_id=user.id, name=user.name, role=user.role)
 
@@ -153,6 +155,7 @@ async def promote_to_admin(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     target.role = UserRole.admin
+    await db.commit()
     return {"message": f"{target.name} promoted to admin"}
 
 

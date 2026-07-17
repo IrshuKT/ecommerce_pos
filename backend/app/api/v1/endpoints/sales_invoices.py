@@ -23,6 +23,8 @@ from app.core.security import get_password_hash
 
 router = APIRouter()
 
+STAFF_ROLES = {"admin", "manager", "sales_staff"}
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HELPER — create invoice from an order (called by orders.py on confirm)
@@ -373,6 +375,6 @@ async def get_invoice(invoice_number: str, db: AsyncSession = Depends(get_db), c
     invoice = result.scalar_one_or_none()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    if current_user.role != "admin" and invoice.customer_id != current_user.id:
+    if current_user.role not in STAFF_ROLES and invoice.customer_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     return invoice

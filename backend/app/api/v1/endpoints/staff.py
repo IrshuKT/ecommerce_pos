@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from app.db.session import get_db
 from app.models.models import User, UserRole
-from app.api.v1.endpoints.auth import get_current_user, get_admin_user
+from app.api.v1.endpoints.auth import get_current_user, require_admin, require_backoffice, require_counter_view
 from app.core.security import get_password_hash
 
 router = APIRouter()
@@ -13,14 +13,10 @@ router = APIRouter()
 STAFF_ROLES = {UserRole.admin, UserRole.manager, UserRole.sales_staff}
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CUSTOMERS — role=customer only, for the Customers page
-# ══════════════════════════════════════════════════════════════════════════════
-
 @router.get("/")
 async def list_users(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_counter_view),
     search: Optional[str] = None,
     trade_only: bool = False,
     page: int = Query(1, ge=1),
@@ -44,7 +40,11 @@ async def list_users(
 
 
 @router.patch("/{user_id}/trade-approve")
-async def approve_trade(user_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)):
+async def approve_trade(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_backoffice),
+):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -57,7 +57,11 @@ async def approve_trade(user_id: int, db: AsyncSession = Depends(get_db), curren
 
 
 @router.patch("/{user_id}/trade-revoke")
-async def revoke_trade(user_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)):
+async def revoke_trade(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_backoffice),
+):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -68,7 +72,11 @@ async def revoke_trade(user_id: int, db: AsyncSession = Depends(get_db), current
 
 
 @router.patch("/{user_id}/toggle-active")
-async def toggle_active(user_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)):
+async def toggle_active(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_backoffice),
+):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -79,7 +87,9 @@ async def toggle_active(user_id: int, db: AsyncSession = Depends(get_db), curren
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# STAFF — admin/manager/sales_staff, for the Staff Users page (admin-only)
+# STAFF — admin/manager/sales_staff, for the Staff Users page
+# List is viewable by any staff role (require_counter_view); create/update/delete
+# stay admin-only (require_admin).
 # ══════════════════════════════════════════════════════════════════════════════
 
 class StaffOut(BaseModel):
@@ -110,13 +120,13 @@ class UpdateStaffIn(BaseModel):
 
 
 @router.get("/staff", response_model=List[StaffOut])
-async def list_staff(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)):
+async def list_staff(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_counter_view)):
     result = await db.execute(select(User).where(User.role.in_(STAFF_ROLES)).order_by(User.name))
     return result.scalars().all()
 
 
 @router.post("/staff", response_model=StaffOut, status_code=201)
-async def create_staff(payload: CreateStaffIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)):
+async def create_staff(payload: CreateStaffIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
     if payload.role not in STAFF_ROLES:
         raise HTTPException(400, "Role must be admin, manager, or sales_staff")
     if (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none():
@@ -138,7 +148,7 @@ async def create_staff(payload: CreateStaffIn, db: AsyncSession = Depends(get_db
 
 
 @router.patch("/staff/{user_id}", response_model=StaffOut)
-async def update_staff(user_id: int, payload: UpdateStaffIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)):
+async def update_staff(user_id: int, payload: UpdateStaffIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
     result = await db.execute(select(User).where(User.id == user_id, User.role.in_(STAFF_ROLES)))
     user = result.scalar_one_or_none()
     if not user:
@@ -167,7 +177,7 @@ async def update_staff(user_id: int, payload: UpdateStaffIn, db: AsyncSession = 
 
 
 @router.delete("/staff/{user_id}", status_code=204)
-async def delete_staff(user_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)):
+async def delete_staff(user_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
     if user_id == current_user.id:
         raise HTTPException(400, "You cannot delete your own account")
     result = await db.execute(select(User).where(User.id == user_id, User.role.in_(STAFF_ROLES)))
@@ -186,9 +196,13 @@ async def delete_staff(user_id: int, db: AsyncSession = Depends(get_db), current
 @router.get("/me/profile")
 async def my_profile(current_user: User = Depends(get_current_user)):
     return {
-        "id": current_user.id, "name": current_user.name, "email": current_user.email,
-        "phone": current_user.phone, "role": current_user.role,
-        "is_trade_approved": current_user.is_trade_approved, "is_active": current_user.is_active,
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "phone": current_user.phone,
+        "role": current_user.role,
+        "is_trade_approved": current_user.is_trade_approved,
+        "is_active": current_user.is_active,
     }
 
 
@@ -198,7 +212,11 @@ class ProfileUpdate(BaseModel):
     phone: Optional[str] = None
 
 @router.patch("/me/profile")
-async def update_profile(payload: ProfileUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def update_profile(
+    payload: ProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     if payload.name: current_user.name = payload.name
     if payload.email: current_user.email = payload.email
     if payload.phone: current_user.phone = payload.phone
@@ -211,7 +229,11 @@ class PasswordChange(BaseModel):
     new_password: str
 
 @router.patch("/me/password")
-async def change_password(payload: PasswordChange, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def change_password(
+    payload: PasswordChange,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     import bcrypt
     if not bcrypt.checkpw(payload.current_password.encode(), current_user.hashed_password.encode()):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
@@ -265,7 +287,7 @@ async def delete_address(address_id: int, db: AsyncSession = Depends(get_db), cu
 # ══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/{user_id}")
-async def get_user(user_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)):
+async def get_user(user_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_counter_view)):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:

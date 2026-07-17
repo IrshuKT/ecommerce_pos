@@ -8,12 +8,14 @@ from decimal import Decimal
 from datetime import date
 from app.db.session import get_db
 from app.models.accounting import SalesInvoice, SalesReturn, SalesReturnItem, ReturnStatus, InvoiceStatus
-from app.models.models import User,ProductVariant
-from app.api.v1.endpoints.auth import get_current_user, get_admin_user
+from app.models.models import User, ProductVariant, UserRole
+from app.api.v1.endpoints.auth import get_current_user, require_backoffice
 from app.services.journal_service import post_sales_return_journal, ret_number, cn_number
 from app.models.stock_transactions import StockTransaction
 
 router = APIRouter()
+
+STAFF_ROLES = {UserRole.admin, UserRole.manager, UserRole.sales_staff}
 
 class ReturnItemIn(BaseModel):
     variant_id: Optional[int]
@@ -42,7 +44,7 @@ async def create_sales_return(payload: CreateReturnRequest, db: AsyncSession = D
         invoice = result.scalar_one_or_none()
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
-        if current_user.role != "admin" and invoice.customer_id != current_user.id:
+        if current_user.role not in STAFF_ROLES and invoice.customer_id != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
         invoice_id = invoice.id
         customer_id = invoice.customer_id
@@ -73,7 +75,7 @@ async def create_sales_return(payload: CreateReturnRequest, db: AsyncSession = D
     return {"return_number": sales_return.return_number, "status": sales_return.status}
 
 @router.get("/")
-async def list_returns(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user), status: Optional[str] = None):
+async def list_returns(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_backoffice), status: Optional[str] = None):
     query = select(SalesReturn).options(selectinload(SalesReturn.customer)).order_by(SalesReturn.return_date.desc())
     if status: query = query.where(SalesReturn.status == status)
     result = await db.execute(query)
@@ -95,7 +97,7 @@ async def list_returns(db: AsyncSession = Depends(get_db), current_user: User = 
     ]
 
 @router.patch("/{return_number:path}/approve")
-async def approve_return(return_number: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)):
+async def approve_return(return_number: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_backoffice)):
     result = await db.execute(select(SalesReturn).options(selectinload(SalesReturn.items)).where(SalesReturn.return_number == return_number))
     sales_return = result.scalar_one_or_none()
     if not sales_return: raise HTTPException(status_code=404, detail="Return not found")
@@ -124,7 +126,7 @@ async def approve_return(return_number: str, db: AsyncSession = Depends(get_db),
 
 
 @router.patch("/{return_number:path}/reject")
-async def reject_return(return_number: str, reason: Optional[str] = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_admin_user)):
+async def reject_return(return_number: str, reason: Optional[str] = None, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_backoffice)):
     result = await db.execute(select(SalesReturn).where(SalesReturn.return_number == return_number))
     sr = result.scalar_one_or_none()
     if not sr: raise HTTPException(status_code=404, detail="Return not found")
@@ -142,6 +144,6 @@ async def get_return(return_number: str, db: AsyncSession = Depends(get_db), cur
     sales_return = result.scalar_one_or_none()
     if not sales_return:
         raise HTTPException(status_code=404, detail="Return not found")
-    if current_user.role != "admin" and sales_return.customer_id != current_user.id:
+    if current_user.role not in STAFF_ROLES and sales_return.customer_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     return sales_return

@@ -6,7 +6,7 @@ from typing import Optional
 from slugify import slugify
 from app.db.session import get_db
 from app.models.models import Category
-from app.api.v1.endpoints.auth import get_admin_user
+from app.api.v1.endpoints.auth import require_backoffice
 from app.models.models import User
 
 router = APIRouter()
@@ -31,13 +31,14 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
 async def create_category(
     payload: CategoryIn,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     sl = payload.slug or slugify(payload.name)
     cat = Category(name=payload.name, slug=sl, description=payload.description,
                    parent_id=payload.parent_id, sort_order=payload.sort_order, is_active=True)
     db.add(cat)
-    await db.flush()
+    await db.commit()
+    await db.refresh(cat)
     return {"id": cat.id, "name": cat.name, "slug": cat.slug}
 
 
@@ -45,10 +46,11 @@ async def create_category(
 async def delete_category(
     category_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(require_backoffice),
 ):
     result = await db.execute(select(Category).where(Category.id == category_id))
     cat = result.scalar_one_or_none()
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
     cat.is_active = False
+    await db.commit()
