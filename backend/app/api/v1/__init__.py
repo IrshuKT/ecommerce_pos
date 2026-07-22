@@ -3,7 +3,7 @@ from app.api.v1.endpoints import (
     settings,
     images,
     auth, users, products, categories, cart, orders,
-    coupons, payments, admin,journals,
+    coupons, payments, admin,journals,bank_accounts,
     sales_invoices, sales_returns, accounting, reports,stock_transactions
 )
 
@@ -30,6 +30,11 @@ router.include_router(accounting.pr_router,       prefix="/purchase-returns", ta
 router.include_router(accounting.receipt_router,  prefix="/receipts",    tags=["Receipts"])
 router.include_router(accounting.payment_v_router,prefix="/payment-vouchers", tags=["Payment Vouchers"])
 router.include_router(accounting.accounting_router, prefix="/accounting", tags=["Accounting"])
+router.include_router(
+    bank_accounts.accounting_router,
+    prefix="/bank_accounts",
+    tags=["Bank Accounts"],
+)
 router.include_router(reports.router,        prefix="/reports",          tags=["Reports"])
 router.include_router(reports.gst_router,    prefix="/vat",              tags=["VAT Returns"])
 router.include_router(journals.router, prefix="/journals", tags=["Journals"])

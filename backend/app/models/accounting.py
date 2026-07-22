@@ -73,6 +73,15 @@ class Account(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     parent: Mapped[Optional["Account"]] = relationship("Account", remote_side="Account.id")
     journal_lines: Mapped[List["JournalLine"]] = relationship("JournalLine", back_populates="account")
+    is_bank = Column(Boolean, default=False)
+
+    bank_name = Column(String(150), nullable=True)
+    account_number = Column(String(100), nullable=True)
+    iban = Column(String(100), nullable=True)
+    branch = Column(String(150), nullable=True)
+    swift_code = Column(String(50), nullable=True)
+    currency = Column(String(10), nullable=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     __table_args__ = (Index("ix_accounts_type", "account_type"),)
 
 
@@ -326,6 +335,11 @@ class ReceiptVoucher(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     invoice: Mapped[Optional["SalesInvoice"]] = relationship("SalesInvoice", back_populates="receipts")
     debit_account: Mapped["Account"] = relationship("Account", foreign_keys=[debit_account_id])
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    party_type: Mapped[str] = mapped_column(String(20), default="customer")  # "customer" | "income_account"
+    customer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    income_account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), nullable=True)
+
 
 
 class PaymentVoucher(Base):
@@ -348,6 +362,10 @@ class PaymentVoucher(Base):
     vendor: Mapped[Optional["Vendor"]] = relationship("Vendor")
     purchase: Mapped[Optional["Purchase"]] = relationship("Purchase", back_populates="payments")
     credit_account: Mapped["Account"] = relationship("Account", foreign_keys=[credit_account_id])
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    party_type: Mapped[str] = mapped_column(String(20), default="vendor")  # "vendor" | "expense_account"
+    vendor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("vendors.id"), nullable=True)
+    expense_account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), nullable=True)
 
 
 class VATReturn(Base):

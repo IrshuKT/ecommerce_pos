@@ -23,13 +23,15 @@ export default function PurchasesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ vendor_id: "", purchase_date: new Date().toISOString().split("T")[0], vendor_invoice_number: "", notes: "" });
-  const [items, setItems] = useState([{ product_id: '', 
+  const [items, setItems] = useState([{
+    product_id: '',
     product_name: "",
     variant_id: '',
-     quantity: "1", 
-     unit_price: "",
-      vat_rate: "18",
-       unit: "Nos" }]);
+    quantity: "1",
+    unit_price: "",
+    vat_rate: "5",
+    unit: "Nos"
+  }]);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -43,12 +45,12 @@ export default function PurchasesPage() {
   };
   useEffect(() => { load(); }, []);
 
-  const addItem = () => setItems([...items, { product_id: '',variant_id:"", product_name: "", quantity: "1", unit_price: "", vat_rate: "18", unit: "Nos" }]);
+  const addItem = () => setItems([...items, { product_id: '', variant_id: "", product_name: "", quantity: "1", unit_price: "", vat_rate: "5", unit: "Nos" }]);
   const removeItem = (i: number) => setItems(items.filter((_, idx) => idx !== i));
   const updateItem = (i: number, key: string, val: string) => setItems(items.map((item, idx) => idx === i ? { ...item, [key]: val } : item));
 
   const updateItemFields = (i: number, fields: Record<string, string>) => {
-  setItems(items.map((item, idx) => idx === i ? { ...item, ...fields } : item));
+    setItems(items.map((item, idx) => idx === i ? { ...item, ...fields } : item));
   };
 
   const save = async () => {
@@ -64,16 +66,16 @@ export default function PurchasesPage() {
         ...form,
         vendor_id: parseInt(form.vendor_id),
         items: items.map(item => ({
-  product_name: item.product_name,
-  variant_id: item.variant_id ? parseInt(item.variant_id) : null,  // ← add this
-  quantity: parseFloat(item.quantity),
-  unit_price: parseFloat(item.unit_price),
-  vat_rate: parseFloat(item.vat_rate),
-  unit: item.unit,
-})),
+          product_name: item.product_name,
+          variant_id: item.variant_id ? parseInt(item.variant_id) : null,  // ← add this
+          quantity: parseFloat(item.quantity),
+          unit_price: parseFloat(item.unit_price),
+          vat_rate: parseFloat(item.vat_rate),
+          unit: item.unit,
+        })),
       });
       setShowForm(false);
-      setItems([{ product_id: '', product_name: "",variant_id:'', quantity: "1", unit_price: "", vat_rate: "18", unit: "Nos" }]);
+      setItems([{ product_id: '', product_name: "", variant_id: '', quantity: "1", unit_price: "", vat_rate: "5", unit: "Nos" }]);
       load();
     } catch (e: any) {
       alert(e.response?.data?.detail || "Failed to save");
@@ -91,7 +93,7 @@ export default function PurchasesPage() {
       load();
       alert("Stock updated!");
     } catch (e: any) {
-           alert(e.response?.data?.detail || e.message || "Failed");
+      alert(e.response?.data?.detail || e.message || "Failed");
     }
   };
 
@@ -148,67 +150,106 @@ export default function PurchasesPage() {
               <input className="input-field" placeholder="Eg: VND/2024/001" value={form.vendor_invoice_number} onChange={(e) => setForm({ ...form, vendor_invoice_number: e.target.value })} />
             </div>
           </div>
+          <h4 style={{ fontSize: 13, fontWeight: 600, color: "#475569", marginBottom: 8 }}>Items</h4>
 
-          <h4 style={{ fontSize: 13, fontWeight: 600, color: "#475569", marginBottom: 10 }}>Items</h4>
-          {items.map((item, idx) => (
-            <div key={idx} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 80px 40px", gap: 8, marginBottom: 8, alignItems: "end" }}>
-              <div>
-  <label className="label">Product</label>
-  <select
-    className="input-field"
-    value={item.product_id || ""}
-    onChange={(e) => {
-  const selectedValue = e.target.value;
-  const product = products.find((x: any) => x.id === Number(selectedValue));
-  updateItemFields(idx, {
-    product_id: selectedValue,
-    product_name: product?.name || "",
-    variant_id: "",  
-    unit_price: "0",
-    vat_rate: String(product?.vat_rate ?? 18),
-    unit: "Nos"
-  });
-}}
-  >
-    <option value="">Select Product</option>
-    {products.map(p => (
-      <option key={p.id} value={p.id}>
-        {p.name}
-      </option>
-    ))}
-  </select>
+{/* header row */}
+<div style={{ display: "grid", gridTemplateColumns: "34px 1.8fr 1.6fr 0.7fr 0.9fr 0.7fr 0.7fr 32px", gap: 6, marginBottom: 4, padding: "0 2px" }}>
+  <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8" }}>No</span>
+  <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8" }}>Product</span>
+  <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8" }}>Variant</span>
+  <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8" }}>Qty</span>
+  <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8" }}>Unit Price</span>
+  <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8" }}>VAT %</span>
+  <span style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8" }}>Unit</span>
+  <span />
 </div>
-<div>
-      <label className="label">Variant</label>
-      <select className="input-field" value={item.variant_id || ""}
-        onChange={(e) => {
-          const variantId = e.target.value;
-          const product = products.find((x: any) => x.id === Number(item.product_id));
-          const variant = product?.variants?.find((v: any) => String(v.id) === variantId);
-          updateItemFields(idx, {
-            variant_id: variantId,
-            unit_price: variant?.cost_price ? String(variant.cost_price) : item.unit_price,
-          });
-        }}>
-        <option value="">Select Variant</option>
-        {products
-          .find((x: any) => x.id === Number(item.product_id))
-          ?.variants?.map((v: any) => (
-            <option key={v.id} value={v.id}>
-              {Object.values(v.selected_attributes || {}).join(" / ") || "Default"} — {v.sku}
-            </option>
-          ))}
-      </select>
-    </div>
-              <div><label className="label">Qty</label><input type="number" className="input-field" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", e.target.value)} /></div>
-              <div><label className="label">Unit Price AED </label><input type="number" className="input-field" value={item.unit_price} onChange={(e) => updateItem(idx, "unit_price", e.target.value)} /></div>
-              <div><label className="label">VAT %</label><input type="number" className="input-field" value={item.vat_rate} onChange={(e) => updateItem(idx, "vat_rate", e.target.value)} /></div>
-              <div><label className="label">Unit</label><input className="input-field" value={item.unit} onChange={(e) => updateItem(idx, "unit", e.target.value)} /></div>
-              <button onClick={() => removeItem(idx)} style={{ marginBottom: 0, background: "#fee2e2", border: "none", borderRadius: 6, color: "#dc2626", cursor: "pointer", height: 38, alignSelf: "end" }}>✕</button>
-            </div>
-          ))}
-          <button onClick={addItem} className="btn-outline" style={{ fontSize: 13, marginBottom: 16 }}>+ Add Item</button>
 
+{items.map((item, idx) => (
+  <div
+    key={idx}
+    style={{
+      display: "grid",
+      gridTemplateColumns: "34px 1.8fr 1.6fr 0.7fr 0.9fr 0.7fr 0.7fr 32px",
+      gap: 6,
+      marginBottom: 6,
+      alignItems: "center",
+    }}
+  >
+    <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", textAlign: "center" }}>
+      {idx + 1}
+    </div>
+
+    <select
+      className="input-field"
+      value={item.product_id || ""}
+      onChange={(e) => {
+        const selectedValue = e.target.value;
+        const product = products.find((x: any) => x.id === Number(selectedValue));
+        updateItemFields(idx, {
+          product_id: selectedValue,
+          product_name: product?.name || "",
+          variant_id: "",
+          unit_price: "0",
+          vat_rate: String(product?.vat_rate ?? 5),
+          unit: "Nos",
+        });
+      }}
+    >
+      <option value="">Select Product</option>
+      {products.map(p => (
+        <option key={p.id} value={p.id}>{p.name}</option>
+      ))}
+    </select>
+
+    <select
+      className="input-field"
+      value={item.variant_id || ""}
+      onChange={(e) => {
+        const variantId = e.target.value;
+        const product = products.find((x: any) => x.id === Number(item.product_id));
+        const variant = product?.variants?.find((v: any) => String(v.id) === variantId);
+        updateItemFields(idx, {
+          variant_id: variantId,
+          unit_price: variant?.cost_price ? String(variant.cost_price) : item.unit_price,
+        });
+      }}
+    >
+      <option value="">Select Variant</option>
+      {products
+        .find((x: any) => x.id === Number(item.product_id))
+        ?.variants?.map((v: any) => (
+          <option key={v.id} value={v.id}>
+            {Object.values(v.selected_attributes || {}).join(" / ") || "Default"} — {v.sku}
+          </option>
+        ))}
+    </select>
+
+    <input type="number" className="input-field" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", e.target.value)} />
+    <input type="number" className="input-field" value={item.unit_price} onChange={(e) => updateItem(idx, "unit_price", e.target.value)} />
+    <input type="number" className="input-field" value={item.vat_rate} onChange={(e) => updateItem(idx, "vat_rate", e.target.value)} />
+    <input className="input-field" value={item.unit} onChange={(e) => updateItem(idx, "unit", e.target.value)} />
+
+    <button
+      onClick={() => removeItem(idx)}
+      style={{
+        background: "#fee2e2",
+        border: "none",
+        borderRadius: 6,
+        color: "#dc2626",
+        cursor: "pointer",
+        height: 34,
+        width: 32,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 0,
+      }}
+    >
+      ✕
+    </button>
+  </div>
+))}
+<button onClick={addItem} className="btn-outline" style={{ fontSize: 13, marginBottom: 16 }}>+ Add Item</button>
           <div style={{ display: "flex", gap: 10 }}>
             <button className="btn-primary" onClick={save} disabled={saving}>{saving ? "Saving..." : "Create Purchase"}</button>
             <button className="btn-outline" onClick={() => setShowForm(false)}>Cancel</button>

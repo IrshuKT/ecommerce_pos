@@ -5,7 +5,7 @@ from app.models.accounting import Account, AccountType
 ACCOUNTS = [
     ("1000","Current Assets",AccountType.asset,None,True),
     ("1010","Cash in Hand",AccountType.asset,"1000",True),
-    ("1020","Bank Account",AccountType.asset,"1000",True),
+    ("1020","Bank Accounts",AccountType.asset,"1000",True),
     ("1030","Petty Cash",AccountType.asset,"1000",False),
     ("1100","Inventory / Stock",AccountType.asset,"1000",True),
     ("1110","Glass Stock",AccountType.asset,"1100",True),

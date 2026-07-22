@@ -4,7 +4,7 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 import random, string
-from app.models.accounting import Journal, JournalLine, Account, VoucherType, NumberSequence
+from app.models.accounting import (Journal, JournalLine, Account, VoucherType, NumberSequence,ReceiptVoucher,PaymentVoucher)
 
 
 def _current_financial_year(d: date = None) -> str:
@@ -105,13 +105,49 @@ async def post_sales_invoice_journal(db, invoice, customer_id):
             lines.append({"account_code": "4220", "debit": abs(ro), "narration": "Round off"})
     return await post_journal(db, VoucherType.sales_invoice, invoice.invoice_date, lines, reference=invoice.invoice_number, narration=f"Sales invoice {invoice.invoice_number}")
    
-async def post_receipt_journal(db, receipt, customer_id):
-    debit_account = await get_account(db, _payment_mode_account(receipt.payment_mode))
+async def post_receipt_journal(db: AsyncSession, receipt: ReceiptVoucher) -> Journal:
+    """
+    Debit: Cash/Bank (based on payment_mode) — receipt.debit_account_id's account_code
+    Credit: AR control account (1200), tagged with customer_id — if party_type == customer
+         or the chosen income account directly — if party_type == income_account
+    """
+    debit_result = await db.execute(select(Account).where(Account.id == receipt.debit_account_id))
+    debit_account = debit_result.scalar_one_or_none()
+    if not debit_account:
+        raise ValueError(f"Debit account not found for id={receipt.debit_account_id}")
+
     lines = [
-        {"account_code": debit_account.code, "debit": float(receipt.amount), "narration": f"Receipt {receipt.receipt_number}", "customer_id": customer_id},
-        {"account_code": "1200", "credit": float(receipt.amount), "narration": "Against invoice", "customer_id": customer_id},
+        {
+            "account_code": debit_account.code,
+            "debit": float(receipt.amount),
+            "narration": receipt.narration or f"Receipt {receipt.receipt_number}",
+            "customer_id": receipt.customer_id,
+        },
     ]
-    return await post_journal(db, VoucherType.receipt, receipt.receipt_date, lines, reference=receipt.receipt_number)
+
+    if receipt.party_type == "customer":
+        lines.append({
+            "account_code": "1200",  # shared AR control account, same as post_sales_invoice_journal
+            "credit": float(receipt.amount),
+            "narration": receipt.narration or f"Receipt {receipt.receipt_number}",
+            "customer_id": receipt.customer_id,
+        })
+    else:
+        income_result = await db.execute(select(Account).where(Account.id == receipt.income_account_id))
+        income_account = income_result.scalar_one_or_none()
+        if not income_account:
+            raise ValueError(f"Income account not found for id={receipt.income_account_id}")
+        lines.append({
+            "account_code": income_account.code,
+            "credit": float(receipt.amount),
+            "narration": receipt.narration or f"Receipt {receipt.receipt_number}",
+        })
+
+    return await post_journal(
+        db, VoucherType.receipt, receipt.receipt_date, lines,
+        reference=receipt.receipt_number,
+        narration=f"Receipt {receipt.receipt_number}" + (f" — {receipt.narration}" if receipt.narration else ""),
+    )
 
 
 async def post_purchase_journal(db, purchase, vendor_id):
@@ -124,13 +160,49 @@ async def post_purchase_journal(db, purchase, vendor_id):
     return await post_journal(db, VoucherType.purchase_invoice, purchase.purchase_date, lines, reference=purchase.purchase_number)
 
 
-async def post_payment_journal(db, payment, vendor_id):
-    credit_account = await get_account(db, _payment_mode_account(payment.payment_mode))
-    lines = [
-        {"account_code": "2000", "debit": float(payment.amount), "narration": f"Payment {payment.payment_number}", "vendor_id": vendor_id},
-        {"account_code": credit_account.code, "credit": float(payment.amount), "narration": f"{payment.payment_mode}", "vendor_id": vendor_id},
-    ]
-    return await post_journal(db, VoucherType.payment, payment.payment_date, lines, reference=payment.payment_number)
+async def post_payment_journal(db: AsyncSession, payment: PaymentVoucher) -> Journal:
+    """
+    Credit: Cash/Bank — payment.credit_account_id's account_code
+    Debit: AP control account (2000), tagged with vendor_id — if party_type == vendor
+        or the chosen expense account directly — if party_type == expense_account
+    """
+    credit_result = await db.execute(select(Account).where(Account.id == payment.credit_account_id))
+    credit_account = credit_result.scalar_one_or_none()
+    if not credit_account:
+        raise ValueError(f"Credit account not found for id={payment.credit_account_id}")
+
+    lines = []
+
+    if payment.party_type == "vendor":
+        lines.append({
+            "account_code": "2000",  # shared AP control account, same as post_purchase_journal
+            "debit": float(payment.amount),
+            "narration": payment.narration or f"Payment {payment.payment_number}",
+            "vendor_id": payment.vendor_id,
+        })
+    else:
+        expense_result = await db.execute(select(Account).where(Account.id == payment.expense_account_id))
+        expense_account = expense_result.scalar_one_or_none()
+        if not expense_account:
+            raise ValueError(f"Expense account not found for id={payment.expense_account_id}")
+        lines.append({
+            "account_code": expense_account.code,
+            "debit": float(payment.amount),
+            "narration": payment.narration or f"Payment {payment.payment_number}",
+        })
+
+    lines.append({
+        "account_code": credit_account.code,
+        "credit": float(payment.amount),
+        "narration": payment.narration or f"Payment {payment.payment_number}",
+        "vendor_id": payment.vendor_id if payment.party_type == "vendor" else None,
+    })
+
+    return await post_journal(
+        db, VoucherType.payment, payment.payment_date, lines,
+        reference=payment.payment_number,
+        narration=f"Payment {payment.payment_number}" + (f" — {payment.narration}" if payment.narration else ""),
+    )
 
 
 async def post_sales_return_journal(db, sales_return, customer_id):
@@ -164,3 +236,35 @@ async def get_account_balance(db, account_code, as_of_date=None):
     dr, cr = Decimal(str(row.dr)), Decimal(str(row.cr))
     balance = (dr - cr) if account.account_type in ("asset", "expense") else (cr - dr)
     return {"account_code": account_code, "account_name": account.name, "account_type": account.account_type, "total_debit": dr, "total_credit": cr, "balance": balance}
+
+async def reverse_journal(db: AsyncSession, original_journal_id: int, narration: str) -> Journal:
+    """
+    Creates a new Journal that exactly mirrors an existing one but with
+    debit/credit swapped on every line — the standard accounting way to
+    void an entry without deleting history.
+    """
+    result = await db.execute(
+        select(JournalLine).where(JournalLine.journal_id == original_journal_id)
+    )
+    original_lines = result.scalars().all()
+    if not original_lines:
+        raise ValueError(f"No journal lines found for journal_id={original_journal_id}")
+
+    reversal = Journal(
+        journal_date=date.today(),
+        narration=narration,
+        reversal_of_id=original_journal_id,  # add this FK column if not present
+    )
+    db.add(reversal)
+    await db.flush()
+
+    for line in original_lines:
+        db.add(JournalLine(
+            journal_id=reversal.id,
+            account_id=line.account_id,
+            debit=line.credit,   # swapped
+            credit=line.debit,   # swapped
+            description=f"Reversal — {line.description or ''}".strip(),
+        ))
+
+    return reversal

@@ -25,7 +25,7 @@ export default function AddProductPage() {
   const [categories, setCategories] = useState<any[]>([]);
   const [newCatName, setNewCatName] = useState("");
   const [addingCat, setAddingCat] = useState(false);
-  const [info, setInfo] = useState({ name: "", short_description: "", description: "", category_id: "", hsn_code: "", vat_rate: "18", price_type: "fixed", is_featured: false });
+  const [info, setInfo] = useState({ name: "", short_description: "", description: "", category_id: "", hsn_code: "", vat_rate: "5", price_type: "fixed", is_featured: false });
   const [attrs, setAttrs] = useState<Attr[]>([]);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [bulk, setBulk] = useState({ price: "", trade_price: "", cost_price: "", stock_qty: "" });

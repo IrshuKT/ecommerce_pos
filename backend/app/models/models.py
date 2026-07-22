@@ -289,6 +289,7 @@ class CompanySettings(Base):
     bank_account_number: Mapped[Optional[str]] = mapped_column(String(30))
     bank_iban: Mapped[Optional[str]] = mapped_column(String(34))
     bank_branch: Mapped[Optional[str]] = mapped_column(String(100))
+    bank_accounts: Mapped[list] = mapped_column(JSON, default=list)   
     invoice_prefix: Mapped[str] = mapped_column(String(10), default="INV")
     invoice_terms: Mapped[Optional[str]] = mapped_column(String(500))
     invoice_footer: Mapped[Optional[str]] = mapped_column(String(300))

@@ -25,7 +25,6 @@ async def get_or_create_settings(db: AsyncSession) -> CompanySettings:
 
 @router.get("/")
 async def get_settings(db: AsyncSession = Depends(get_db)):
-    """Public endpoint — returns company info for frontend."""
     settings = await get_or_create_settings(db)
     return {
         "company_name": settings.company_name,
@@ -47,10 +46,6 @@ async def get_settings(db: AsyncSession = Depends(get_db)):
         "website": settings.website,
         "invoice_terms": settings.invoice_terms,
         "invoice_footer": settings.invoice_footer,
-        "bank_name": settings.bank_name,
-        "bank_account_number": settings.bank_account_number,
-        "bank_iban": settings.bank_iban,
-        "bank_branch": settings.bank_branch,
     }
 
 
@@ -65,15 +60,15 @@ async def update_settings(
         "company_name", "tagline", "email", "phone", "mobile",
         "address_line1", "address_line2", "city", "emirate",
         "pincode", "country", "trn", "currency_code", "currency_symbol",
-        "default_vat_rate", "bank_name",
-        "bank_account_number", "bank_iban", "bank_branch",
+        "default_vat_rate",
         "invoice_prefix", "invoice_terms", "invoice_footer", "website",
     }
     for k, v in payload.items():
         if k in allowed:
             setattr(settings, k, v)
+    await db.commit()
+    await db.refresh(settings)
     return {"message": "Settings updated"}
-
 
 @router.post("/logo")
 async def upload_logo(
@@ -94,13 +89,23 @@ async def upload_logo(
     url = f"/uploads/company/{filename}"
     settings = await get_or_create_settings(db)
     settings.logo_url = url
-    return {"logo_url": url}
+    await db.commit()          # ← was missing
+    return {"logo_url": url}   
 
 
 @router.get("/accounts")
-async def list_accounts(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_backoffice)):
+async def list_accounts(
+    is_bank: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_backoffice),
+):
     from app.models.accounting import Account
-    from sqlalchemy import select
-    result = await db.execute(select(Account).where(Account.is_active == True).order_by(Account.code))
-    accounts = result.scalars().all()
-    return [{"id": a.id, "code": a.code, "name": a.name, "account_type": a.account_type} for a in accounts]
+    q = select(Account).where(Account.is_active == True)
+    if is_bank is not None:
+        q = q.where(Account.is_bank == is_bank)
+    result = await db.execute(q.order_by(Account.code))
+    return [
+        {"id": a.id, "code": a.code, "name": a.name, "account_type": a.account_type,
+         "is_bank": a.is_bank, "is_default": a.is_default}
+        for a in result.scalars().all()
+    ]
